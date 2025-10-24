@@ -1,0 +1,708 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>Nodebreaker Infinity Mobile — System Rebuild</title>
+<style>
+  :root{
+    --bg:#061016; --panel:rgba(255,255,255,0.04); --accent:#1e90ff; --good:#10b981; --bad:#ef4444;
+    --glass: rgba(255,255,255,0.03);
+  }
+  html,body{height:100%;margin:0;background:var(--bg);color:#e6eef6;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;}
+  #game{display:block;width:100%;height:calc(100vh - 140px);touch-action:none;background:linear-gradient(180deg,#041018,#021017);}
+  #ui{height:140px;padding:8px;box-sizing:border-box;display:flex;gap:8px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;}
+  .panel{background:var(--panel);border-radius:12px;padding:8px;min-width:120px;box-shadow:0 6px 18px rgba(0,0,0,0.35);backdrop-filter: blur(4px);}
+  button{padding:8px 10px;border-radius:10px;border:0;background:var(--accent);color:white;font-weight:700;touch-action:manipulation;}
+  .small{font-size:13px;color:#cbd8e6}
+  #shop button{display:block;width:100%;margin-top:6px;background:#16a34a;}
+  #msg{position:fixed;left:8px;bottom:150px;background:rgba(0,0,0,0.6);color:#fff;padding:6px 8px;border-radius:8px;font-size:13px;z-index:1000;}
+  #controls{display:flex;flex-direction:column;gap:6px;}
+  input[type="range"]{width:120px;}
+  .muted{opacity:0.5}
+  .title{font-weight:800;font-size:16px}
+  .tiny{font-size:11px;color:#c7d5e8}
+  .flexrow{display:flex;gap:8px; align-items:center;}
+  textarea{width:360px;height:70px;background:#021018;color:#e6eef6;border-radius:8px;padding:6px;border:1px solid rgba(255,255,255,0.04)}
+  @media (max-width:720px){ textarea{width:100%} #ui{height:auto} }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="ui">
+  <div class="panel" style="min-width:200px;">
+    <div class="title">Nodebreaker Infinity Mobile</div>
+    <div class="small">Mode: <span id="modeLabel">Auto</span> • Theme: <span id="themeLabel">System Rebuild</span></div>
+    <div class="small">Bits: <strong id="bits">0</strong></div>
+    <div class="small">Prestige (Rebuilds): <strong id="prestige">0</strong> • Mult: <strong id="pmult">1.00x</strong></div>
+    <div class="small">Nodes destroyed: <span id="nodes">0</span></div>
+    <div style="margin-top:8px" class="flexrow">
+      <button id="pauseBtn">Pause</button>
+      <button id="muteBtn" class="muted">Mute</button>
+    </div>
+  </div>
+
+  <div class="panel" style="flex:1;">
+    <div class="title">Gameplay</div>
+    <div class="small">Drag or tap to place reticle. Every pulse damages nearby nodes. Collect drops by sweeping them. Prestige = System Rebuild resets progress but grants permanent bit multiplier and palette shift.</div>
+    <div style="margin-top:8px" class="flexrow">
+      <label class="tiny">Graphics:</label>
+      <select id="gfxSelect">
+        <option value="auto">Auto</option>
+        <option value="high">High</option>
+        <option value="low">Low</option>
+      </select>
+      <label class="tiny">Quality:</label>
+      <input id="qualityRange" type="range" min="0" max="2" value="1">
+      <div class="tiny" id="perfHint" style="margin-left:8px">Detecting...</div>
+    </div>
+  </div>
+
+  <div class="panel" id="shop" style="min-width:260px;">
+    <div class="title">Infinity Upgrades (infinite)</div>
+    <div class="small">Each upgrade scales cost exponentially. Buy many — numbers grow forever.</div>
+
+    <div style="margin-top:6px">
+      <div class="small">Damage <span id="ud_dmg_lvl">0</span> — Cost: <span id="ud_dmg_cost">10</span></div>
+      <button data-upg="dmg" class="buyBtn">Buy Damage</button>
+    </div>
+    <div style="margin-top:6px">
+      <div class="small">Pulse Speed <span id="ud_pulse_lvl">0</span> — Cost: <span id="ud_pulse_cost">30</span></div>
+      <button data-upg="pulse" class="buyBtn">Buy Pulse</button>
+    </div>
+    <div style="margin-top:6px">
+      <div class="small">Auto-Collect <span id="ud_auto_lvl">0</span> — Cost: <span id="ud_auto_cost">25</span></div>
+      <button data-upg="auto" class="buyBtn">Buy Auto</button>
+    </div>
+    <div style="margin-top:6px">
+      <div class="small">Drop Mult <span id="ud_drop_lvl">0</span> — Cost: <span id="ud_drop_cost">50</span></div>
+      <button data-upg="drop" class="buyBtn">Buy Drop×</button>
+    </div>
+    <div style="margin-top:6px">
+      <div class="small">Spawn Rate <span id="ud_spawn_lvl">0</span> — Cost: <span id="ud_spawn_cost">40</span></div>
+      <button data-upg="spawn" class="buyBtn">Buy Spawn</button>
+    </div>
+
+    <div style="margin-top:8px" class="small">Quick cheats (dev keys): press G to +500 bits, B to spawn boss</div>
+  </div>
+</div>
+
+<div style="padding:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;">
+  <div class="panel" style="min-width:320px;">
+    <div class="title">Save / Export / Import</div>
+    <div class="small">Auto-saves to your browser. Use export to copy a save string; import one to load.</div>
+    <div style="margin-top:8px" class="flexrow">
+      <button id="exportBtn">Export Save</button>
+      <button id="importBtn">Import Save</button>
+      <button id="hardResetBtn" style="background:var(--bad)">Reset All</button>
+    </div>
+    <div style="margin-top:8px">
+      <textarea id="saveText" placeholder="Save string appears here when you export..."></textarea>
+    </div>
+  </div>
+
+  <div class="panel" style="min-width:260px;">
+    <div class="title">Prestige — System Rebuild</div>
+    <div class="small">Rebuild the system to gain permanent multiplier (adds +8% per rebuild). Each rebuild shifts theme colors.</div>
+    <div style="margin-top:8px" class="flexrow">
+      <button id="prestigeBtn" style="background:var(--good)">System Rebuild</button>
+      <div class="small" id="prestigeCost">Requires 1000 bits</div>
+    </div>
+    <div style="margin-top:8px">
+      <div class="small">Theme preview: <span id="themePreview">Default</span></div>
+    </div>
+  </div>
+</div>
+
+<div id="msg" style="display:none"></div>
+
+<script>
+/* Nodebreaker Infinity Mobile — Single-file game
+   Features: infinite upgrades, bosses, prestige (system rebuild), save/export/import, performance-adaptive
+*/
+
+(() => {
+  // ---- low-level config ----
+  const CANVAS = document.getElementById('game');
+  const ctx = CANVAS.getContext('2d', { alpha: false });
+  const DPR = Math.max(1, window.devicePixelRatio || 1);
+  let WIDTH = 360, HEIGHT = 640;
+  function resizeCanvas(){
+    const w = window.innerWidth;
+    const h = window.innerHeight - document.getElementById('ui').clientHeight - 10;
+    CANVAS.style.width = w + 'px';
+    CANVAS.style.height = h + 'px';
+    WIDTH = Math.floor(w * DPR);
+    HEIGHT = Math.floor(h * DPR);
+    CANVAS.width = WIDTH;
+    CANVAS.height = HEIGHT;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+
+  // ---- DOM hooks ----
+  const bitsEl = document.getElementById('bits');
+  const prestigeEl = document.getElementById('prestige');
+  const pmultEl = document.getElementById('pmult');
+  const nodesEl = document.getElementById('nodes');
+  const udEls = {
+    dmg: { lvl: document.getElementById('ud_dmg_lvl'), cost: document.getElementById('ud_dmg_cost') },
+    pulse: { lvl: document.getElementById('ud_pulse_lvl'), cost: document.getElementById('ud_pulse_cost') },
+    auto: { lvl: document.getElementById('ud_auto_lvl'), cost: document.getElementById('ud_auto_cost') },
+    drop: { lvl: document.getElementById('ud_drop_lvl'), cost: document.getElementById('ud_drop_cost') },
+    spawn: { lvl: document.getElementById('ud_spawn_lvl'), cost: document.getElementById('ud_spawn_cost') }
+  };
+  const buys = document.querySelectorAll('.buyBtn');
+  const msgEl = document.getElementById('msg');
+  const gfxSelect = document.getElementById('gfxSelect');
+  const qualityRange = document.getElementById('qualityRange');
+  const perfHint = document.getElementById('perfHint');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const muteBtn = document.getElementById('muteBtn');
+  const exportBtn = document.getElementById('exportBtn');
+  const importBtn = document.getElementById('importBtn');
+  const saveText = document.getElementById('saveText');
+  const hardResetBtn = document.getElementById('hardResetBtn');
+  const prestigeBtn = document.getElementById('prestigeBtn');
+  const prestigeCostLabel = document.getElementById('prestigeCost');
+  const themeLabel = document.getElementById('themeLabel');
+  const themePreview = document.getElementById('themePreview');
+  const modeLabel = document.getElementById('modeLabel');
+
+  // ---- performance detection & options ----
+  let gfxMode = 'auto'; // auto/high/low
+  let quality = 1; // 0 low, 1 med, 2 high
+  const hardwareThreads = navigator.hardwareConcurrency || 2;
+  function detectPerf(){
+    // heuristic
+    if (gfxSelect.value !== 'auto') { gfxMode = gfxSelect.value; }
+    else {
+      if (DPR >= 2 && hardwareThreads >= 4) gfxMode = 'high';
+      else if (DPR >= 1.5 && hardwareThreads >= 2) gfxMode = 'high';
+      else gfxMode = 'low';
+    }
+    if (gfxMode === 'high') { quality = 2; perfHint.textContent = 'High'; }
+    else { quality = 0; perfHint.textContent = 'Low'; }
+    modeLabel.textContent = gfxMode;
+    qualityRange.value = quality;
+  }
+  gfxSelect.addEventListener('change', ()=>{ detectPerf(); showMsg('Graphics set to ' + gfxSelect.value); });
+  qualityRange.addEventListener('input', ()=>{ quality = parseInt(qualityRange.value); showMsg('Quality ' + quality); });
+
+  detectPerf();
+
+  // ---- game state (persistent) ----
+  const SAVE_KEY = 'nb_infinity_save_v1';
+  let state = {
+    bits: 0,
+    nodesDestroyed: 0,
+    prestige: 0,
+    upgrades: { dmg:0, pulse:0, auto:0, drop:0, spawn:0 },
+    settings: { gfx:'auto', quality:1, muted:true },
+    prestigeColorIndex: 0
+  };
+
+  // load/save
+  function saveNow(){
+    try{ localStorage.setItem(SAVE_KEY, JSON.stringify(state)); showSaved('Saved'); } catch(e){ console.warn('save failed', e); }
+  }
+  function loadNow(){
+    try{
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (raw) { Object.assign(state, JSON.parse(raw)); applyStateToGame(); showSaved('Loaded'); }
+    } catch(e){ console.warn('load', e); }
+  }
+
+  // export / import
+  exportBtn.addEventListener('click', ()=>{
+    const s = btoa(unescape(encodeURIComponent(JSON.stringify(state))));
+    saveText.value = s;
+    showMsg('Exported save string (copy it)');
+  });
+  importBtn.addEventListener('click', ()=>{
+    const txt = saveText.value.trim();
+    if (!txt) { showMsg('Paste a save string into the box'); return; }
+    try{
+      const raw = decodeURIComponent(escape(atob(txt)));
+      const obj = JSON.parse(raw);
+      state = obj;
+      applyStateToGame();
+      saveNow();
+      showMsg('Imported save');
+    } catch(e){ showMsg('Invalid save string'); }
+  });
+
+  hardResetBtn.addEventListener('click', ()=>{
+    if (!confirm('Reset all progress? This cannot be undone.')) return;
+    localStorage.removeItem(SAVE_KEY);
+    state = {
+      bits: 0, nodesDestroyed: 0, prestige: 0,
+      upgrades: { dmg:0, pulse:0, auto:0, drop:0, spawn:0 }, settings: { gfx:'auto', quality:1, muted:true }, prestigeColorIndex: 0
+    };
+    applyStateToGame();
+    showMsg('Reset done');
+  });
+
+  // ---- game variables ----
+  let bits = 0;
+  let nodesDestroyed = 0;
+  let prestige = 0;
+  function prestigeMult(){ return 1 + prestige * 0.08; }
+  let paused = false;
+  let muted = true;
+
+  // reticle & input
+  const input = { x: null, y: null, active: false };
+  function setInputPos(clientX, clientY){
+    const rect = CANVAS.getBoundingClientRect();
+    input.x = (clientX - rect.left);
+    input.y = (clientY - rect.top);
+  }
+  CANVAS.addEventListener('touchstart', (e)=>{ const t = e.changedTouches[0]; setInputPos(t.clientX, t.clientY); input.active = true; }, {passive:true});
+  CANVAS.addEventListener('touchmove', (e)=>{ const t = e.changedTouches[0]; setInputPos(t.clientX, t.clientY); }, {passive:true});
+  CANVAS.addEventListener('touchend', (e)=>{ input.active = false; }, {passive:true});
+  CANVAS.addEventListener('mousedown', (e)=>{ setInputPos(e.clientX, e.clientY); input.active = true; });
+  window.addEventListener('mousemove', (e)=>{ if (input.active) setInputPos(e.clientX, e.clientY); });
+  window.addEventListener('mouseup', ()=>{ input.active = false; });
+
+  // keyboard dev shortcuts
+  window.addEventListener('keydown', (e)=>{
+    if (e.key === 'g') { bits += 500; updateUI(); showMsg('+500 bits'); }
+    if (e.key === 'b') { spawnBoss(); showMsg('Boss spawned (dev)'); }
+    if (e.key === 'p') { doPrestige(); }
+  });
+
+  // purchase logic (infinite upgrades)
+  function upCost(base, lvl){
+    // exponential scaling but keep numbers human-readable
+    return Math.floor(base * Math.pow(1.22, lvl) * Math.pow(1.01, state.prestige));
+  }
+  const baseCosts = { dmg:10, pulse:30, auto:25, drop:50, spawn:40 };
+
+  buys.forEach(b => {
+    b.addEventListener('click', ()=> {
+      const type = b.getAttribute('data-upg');
+      const cost = upCost(baseCosts[type], state.upgrades[type]);
+      if (bits >= cost) {
+        bits -= cost;
+        state.upgrades[type]++;
+        // immediate effect
+        if (type === 'dmg') {} // damage used later
+        if (type === 'pulse') {}
+        if (type === 'auto') {}
+        if (type === 'drop') {}
+        if (type === 'spawn') {}
+        updateUI();
+        saveNow();
+        showMsg(type.toUpperCase() + ' +1');
+      } else showMsg('Not enough bits');
+    });
+  });
+
+  // UI: pause & mute
+  pauseBtn.addEventListener('click', ()=>{ paused = !paused; pauseBtn.textContent = paused ? 'Unpause' : 'Pause'; showMsg(paused ? 'Paused' : 'Resumed'); });
+  muteBtn.addEventListener('click', ()=>{ muted = !muted; muteBtn.classList.toggle('muted', muted); showMsg(muted ? 'Muted' : 'Unmuted'); state.settings.muted = muted; saveNow(); });
+
+  // prestige button
+  prestigeBtn.addEventListener('click', ()=>{ doPrestige(); });
+
+  function doPrestige(){
+    const req = prestigeRequirement();
+    if (bits < req) { showMsg('Need ' + req + ' bits to rebuild'); return; }
+    if (!confirm('System Rebuild will reset progress but grant permanent multiplier. Proceed?')) return;
+    prestige++;
+    state.prestige = prestige;
+    // carry bits? Usually reset; we'll reset bits to 0 but keep prestige counter
+    bits = 0;
+    state.upgrades = { dmg:0, pulse:0, auto:0, drop:0, spawn:0 };
+    state.prestigeColorIndex = (state.prestigeColorIndex + 1) % palettes.length;
+    applyTheme();
+    updateUI();
+    saveNow();
+    showMsg('System Rebuilt! Prestige +1');
+  }
+
+  function prestigeRequirement(){
+    return Math.max(100, 100 * Math.pow(1.6, Math.max(0, prestige-0)));
+  }
+
+  // ---- entities: enemies (nodes), drops, boss ----
+  const enemies = [];
+  const drops = [];
+  const particles = [];
+  let lastSpawn = 0;
+  let spawnInterval = 1000; // ms
+  let maxEnemies = 6 + Math.floor(state.prestige*0.6);
+  let boss = null;
+  let nodesSinceBoss = 0;
+  const NODES_TO_BOSS_BASE = 12;
+
+  function spawnEnemy(){
+    const s = 24 + Math.random()*48;
+    const hp = Math.round((s/12) * (1 + Math.random()*2)) + Math.floor(state.prestige*2);
+    const x = 40 + Math.random()*(CANVAS.clientWidth - 80);
+    const y = 40 + Math.random()*(CANVAS.clientHeight - 80);
+    enemies.push({ x,y, vx:(Math.random()-0.5)*0.8, vy:(Math.random()-0.5)*0.8, size:s, hp, maxHp:hp, color:randColor() });
+  }
+  function randColor(){
+    const p = palettes[state.prestigeColorIndex % palettes.length];
+    return p[Math.floor(Math.random()*p.length)];
+  }
+  function spawnDrop(x,y,amount){
+    drops.push({ x,y, vx:(Math.random()-0.5)*1.6, vy:-1.2 + Math.random()*-0.6, amount, age:0 });
+  }
+  function createParticles(x,y,n=8,col='#fff'){
+    for(let i=0;i<n;i++) particles.push({ x,y, vx:(Math.random()-0.5)*2.6, vy:(Math.random()-1.5)*2.8, life:300+Math.random()*800, size:1+Math.random()*3, col });
+  }
+
+  // boss logic
+  function spawnBoss(){
+    if (boss) return;
+    const w = CANVAS.clientWidth, h = CANVAS.clientHeight;
+    boss = {
+      x: w/2, y: h/2, size: 110 + Math.floor(prestige*6),
+      maxHp: 120 + prestige*80, hp: 120 + prestige*80, color:'#e11d48', phase:1, timer:0
+    };
+    showMsg('NODE OVERLORD');
+  }
+
+  // ---- palette themes (changes per prestige) ----
+  const palettes = [
+    ['#ff6b6b','#4dabf7','#ffd166','#a78bfa','#6ee7b7'],
+    ['#ffb86b','#60a5fa','#f472b6','#a3e635','#f59e0b'],
+    ['#ff7ab6','#60f0d6','#ffd86b','#9b6bff','#6be3ff'],
+    ['#f87171','#60a5fa','#facc15','#34d399','#fb7185']
+  ];
+  function applyTheme(){
+    const scheme = palettes[state.prestigeColorIndex % palettes.length];
+    document.documentElement.style.setProperty('--accent', scheme[1] || '#1e90ff');
+    document.documentElement.style.setProperty('--good', scheme[3] || '#10b981');
+    themeLabel.textContent = 'System Rebuild ' + state.prestigeColorIndex;
+    themePreview.textContent = 'Palette ' + (state.prestigeColorIndex+1);
+  }
+
+  // ---- core gameplay: pulse & damage ----
+  let lastPulse = 0;
+  function pulseReady(){
+    const base = 600; // ms
+    const pulseLvl = state.upgrades.pulse || 0;
+    const reduce = pulseLvl * 40; // each reduces 40ms
+    return (performance.now() - lastPulse) >= Math.max(120, base - reduce);
+  }
+
+  function getDamage(){
+    const base = 1 + (state.upgrades.dmg || 0);
+    // include prestige scaling as additive multiplier
+    return Math.max(1, Math.floor(base * (1 + prestige * 0.02)));
+  }
+
+  // ---- magnet / auto-collect ----
+  function collectDropsNear(x,y){
+    for (let i = drops.length - 1; i >= 0; i--) {
+      const d = drops[i];
+      const dx = d.x - x, dy = d.y - y;
+      if (Math.hypot(dx,dy) < 18) {
+        const gain = Math.round(d.amount);
+        bits += gain;
+        drops.splice(i,1);
+        createParticles(x,y,6,'#ffd166');
+        updateUI();
+        saveNow();
+      }
+    }
+  }
+
+  // ---- update loop ----
+  let lastFrame = performance.now();
+  function loop(now){
+    const dt = now - lastFrame; lastFrame = now;
+    if (!paused) update(now, dt);
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  function update(now, dt){
+    // spawn logic
+    if (!boss && now - lastSpawn > Math.max(300, spawnInterval - (state.upgrades.spawn||0)*20)) {
+      if (enemies.length < (6 + Math.floor(prestige*0.6) + (state.upgrades.spawn||0))) spawnEnemy();
+      lastSpawn = now;
+    }
+
+    // move enemies
+    for (let i = enemies.length - 1; i >= 0; i--){
+      const e = enemies[i];
+      e.x += e.vx * (dt/16);
+      e.y += e.vy * (dt/16);
+      // bounds
+      if (e.x < 20){ e.x = 20; e.vx *= -1; }
+      if (e.y < 20){ e.y = 20; e.vy *= -1; }
+      const w = CANVAS.clientWidth, h = CANVAS.clientHeight;
+      if (e.x > w-20){ e.x = w-20; e.vx *= -1; }
+      if (e.y > h-20){ e.y = h-20; e.vy *= -1; }
+    }
+
+    // pulse damage
+    if (input.active && input.x !== null && pulseReady()){
+      lastPulse = now;
+      const dmg = getDamage();
+      // damage enemies under reticle
+      for (let i = enemies.length - 1; i >= 0; i--){
+        const e = enemies[i];
+        if (Math.hypot(input.x - e.x, input.y - e.y) <= e.size/2 + 18){
+          e.hp -= dmg;
+          createParticles(input.x, input.y, 6, '#fff');
+          if (e.hp <= 0){
+            const baseGain = Math.max(1, Math.round(e.maxHp/2));
+            const dropMult = 1 + (state.upgrades.drop||0)*0.12;
+            const gain = Math.round(baseGain * dropMult * prestigeMult());
+            bits += gain;
+            nodesDestroyed++;
+            nodesSinceBoss++;
+            spawnDrop(e.x + (Math.random()-0.5)*12, e.y + (Math.random()-0.5)*12, Math.round(gain));
+            enemies.splice(i,1);
+            createParticles(e.x,e.y,12,'#ffd166');
+            updateUI();
+            saveNow();
+            if (nodesSinceBoss >= Math.max(NODES_TO_BOSS_BASE, NODES_TO_BOSS_BASE - Math.floor(prestige))) spawnBoss();
+          }
+        }
+      }
+      // damage boss if present
+      if (boss){
+        if (Math.hypot(input.x - boss.x, input.y - boss.y) <= boss.size/2 + 18){
+          boss.hp -= getDamage();
+          createParticles(input.x, input.y, 10, '#ffb86b');
+          if (boss.hp <= 0){
+            const reward = Math.round((120 + prestige*60) * prestigeMult());
+            bits += reward;
+            createParticles(boss.x, boss.y, 40, '#10b981');
+            boss = null;
+            nodesSinceBoss = 0;
+            showMsg('Boss defeated +'+reward);
+            updateUI();
+            saveNow();
+          }
+        }
+      }
+
+      // auto-collect effect if auto upgrade present
+      if (state.upgrades.auto){
+        // attract drops towards reticle slightly
+        for (let i=drops.length-1;i>=0;i--){
+          const d = drops[i];
+          d.vx += (input.x - d.x) * 0.02;
+          d.vy += (input.y - d.y) * 0.02;
+        }
+      }
+    }
+
+    // drops update & auto-collect center pull if not active
+    for (let i = drops.length - 1; i >= 0; i--){
+      const d = drops[i];
+      d.vy += 0.04 * (dt/16);
+      d.x += d.vx * (dt/16);
+      d.y += d.vy * (dt/16);
+      d.age = (d.age || 0) + dt;
+      const tx = input.active ? input.x : CANVAS.clientWidth/2;
+      const ty = input.active ? input.y : CANVAS.clientHeight/2;
+      if (state.upgrades.auto || (input.active && Math.hypot(d.x - input.x, d.y - input.y) < 30)){
+        d.vx += (tx - d.x) * 0.02 * (dt/16);
+        d.vy += (ty - d.y) * 0.02 * (dt/16);
+      }
+      if (Math.hypot(d.x - tx, d.y - ty) < 14){
+        bits += Math.round(d.amount);
+        drops.splice(i,1);
+        createParticles(tx,ty,8,'#ffd166');
+        updateUI();
+        saveNow();
+      } else if (d.age > 12000) {
+        drops.splice(i,1);
+      }
+    }
+
+    // boss AI movement & attacks
+    if (boss){
+      boss.timer += dt;
+      boss.x += Math.cos(boss.timer/800)*0.3;
+      boss.y += Math.sin(boss.timer/700)*0.4;
+      if (boss.timer > 1400){
+        boss.timer = 0;
+        // spawn small minions
+        for (let i=0;i<2;i++){
+          const size = 12; const hp = 6 + Math.floor(prestige*0.4);
+          const angle = Math.random()*Math.PI*2;
+          const speed = 1.6 + Math.random()*1.4;
+          enemies.push({
+            x: boss.x + Math.cos(angle)*(boss.size/2+10),
+            y: boss.y + Math.sin(angle)*(boss.size/2+10),
+            vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, size, hp, maxHp:hp, color:'#f97316'
+          });
+        }
+      }
+    }
+
+    // particles update
+    for (let i = particles.length - 1; i >= 0; i--){
+      const p = particles[i];
+      p.life -= dt;
+      p.x += p.vx * (dt/16);
+      p.y += p.vy * (dt/16);
+      p.vy += 0.04 * (dt/16);
+      if (p.life <= 0) particles.splice(i,1);
+    }
+
+    // update UI bits every frame lightly
+    updateUI();
+  }
+
+  // ---- rendering ----
+  function render(){
+    const w = CANVAS.clientWidth, h = CANVAS.clientHeight;
+    ctx.fillStyle = '#021018';
+    ctx.fillRect(0,0,w,h);
+
+    // subtle grid
+    ctx.fillStyle = 'rgba(255,255,255,0.02)';
+    for (let x = 0; x < w; x += 36) ctx.fillRect(x, 0, 1, h);
+
+    // drops
+    for (const d of drops){
+      ctx.beginPath();
+      ctx.fillStyle = 'rgba(255,215,80,0.95)';
+      ctx.arc(d.x, d.y, 8, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle = '#021018';
+      ctx.font = '10px system-ui';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('+'+Math.round(d.amount), d.x, d.y);
+    }
+
+    // enemies
+    for (const e of enemies){
+      ctx.save(); ctx.translate(e.x,e.y);
+      ctx.beginPath(); ctx.fillStyle = e.color;
+      const sides = 4 + Math.floor((e.size/20));
+      for (let i=0;i<sides;i++){
+        const a = (i/sides)*Math.PI*2 + (performance.now()/2000);
+        const r = e.size/2 * (0.82 + 0.18*Math.sin(i*3.1+performance.now()/360));
+        const px = Math.cos(a)*r, py = Math.sin(a)*r;
+        if (i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+      }
+      ctx.closePath(); ctx.fill();
+      // hp bar
+      ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(-e.size/2, e.size/2 + 6, e.size, 6);
+      ctx.fillStyle = '#16a34a'; const pct = Math.max(0, e.hp / e.maxHp); ctx.fillRect(-e.size/2, e.size/2 + 6, e.size * pct, 6);
+      ctx.restore();
+    }
+
+    // boss
+    if (boss){
+      ctx.save(); ctx.translate(boss.x,boss.y);
+      ctx.beginPath(); ctx.fillStyle = 'rgba(225,29,72,0.08)'; ctx.arc(0,0,boss.size*0.9,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.fillStyle = boss.color; ctx.arc(0,0,boss.size/2,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.lineWidth = 8; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.arc(0,0,boss.size/2+12,0,Math.PI*2); ctx.stroke();
+      ctx.beginPath(); ctx.lineWidth = 6; ctx.strokeStyle = '#10b981'; ctx.arc(0,0,boss.size/2+12, -Math.PI/2, -Math.PI/2 + Math.PI*2 * Math.max(0, boss.hp/boss.maxHp)); ctx.stroke();
+      ctx.restore();
+    }
+
+    // particles
+    for (const p of particles){
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.life / 800));
+      ctx.beginPath(); ctx.fillStyle = p.col || '#fff'; ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    // reticle
+    if (input.x !== null){
+      ctx.beginPath(); ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 2; ctx.arc(input.x, input.y, 18, 0, Math.PI*2); ctx.stroke();
+      const pct = Math.min(1, (performance.now() - lastPulse) / Math.max(120, 600 - (state.upgrades.pulse||0)*40));
+      ctx.beginPath(); ctx.strokeStyle = 'rgba(30,136,229,0.9)'; ctx.lineWidth = 3; ctx.arc(input.x, input.y, 26 - pct*12, 0, Math.PI*2 * pct); ctx.stroke();
+    }
+
+    // HUD small overlay
+    ctx.fillStyle = 'rgba(255,255,255,0.04)'; ctx.fillRect(8,8,220,56);
+    ctx.fillStyle = '#e6eef6'; ctx.font = '14px system-ui'; ctx.fillText('Bits: '+Math.floor(bits), 18, 28); ctx.fillText('Damage: '+getDamage(), 18, 50);
+
+    // boss hud top-left if present
+    if (boss){
+      ctx.fillStyle='rgba(0,0,0,0.45)'; ctx.fillRect(10,10,260,46);
+      ctx.fillStyle='#fff'; ctx.font='13px system-ui'; ctx.fillText('Boss: NODE OVERLORD', 18, 28);
+      ctx.fillStyle='#fca5a5'; ctx.fillRect(18,34,220 * Math.max(0,boss.hp/boss.maxHp),6);
+      ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.strokeRect(18,34,220,6);
+    }
+  }
+
+  // ---- UI updates and helpers ----
+  function updateUI(){
+    bitsEl.textContent = Math.floor(bits);
+    prestigeEl.textContent = prestige;
+    pmultEl.textContent = prestigeMult().toFixed(2) + 'x';
+    nodesEl.textContent = nodesDestroyed;
+    // upgrade UI
+    for (const k in udEls){
+      const lvl = state.upgrades[k] || 0;
+      udEls[k].lvl.textContent = lvl;
+      udEls[k].cost.textContent = upCost(baseCosts[k], lvl);
+    }
+    prestigeCostLabel.textContent = 'Requires ' + prestigeRequirement() + ' bits';
+    saveStateToGlobal();
+  }
+
+  function showMsg(txt, t=1200){
+    msgEl.textContent = txt; msgEl.style.display = 'block';
+    clearTimeout(msgEl._t); msgEl._t = setTimeout(()=> msgEl.style.display = 'none', t);
+  }
+  function showSaved(txt){ const el = document.getElementById('savedStatus'); if (el) el.textContent = txt; showMsg(txt, 900); }
+
+  // ---- state <-> game apply ----
+  function applyStateToGame(){
+    bits = state.bits || 0;
+    nodesDestroyed = state.nodesDestroyed || 0;
+    prestige = state.prestige || 0;
+    // update UI & theme
+    applyTheme();
+    detectPerf();
+    updateUI();
+  }
+
+  function saveStateToGlobal(){
+    state.bits = bits;
+    state.nodesDestroyed = nodesDestroyed;
+    state.prestige = prestige;
+    state.settings.gfx = gfxSelect.value;
+    state.settings.quality = quality;
+  }
+
+  // ---- init & start ----
+  loadNow();
+  applyTheme();
+  resizeCanvas();
+  requestAnimationFrame(loop);
+
+  // apply theme initially
+  function applyTheme(){
+    document.documentElement.style.setProperty('--accent', palettes[state.prestigeColorIndex % palettes.length][1] || '#1e90ff');
+    document.documentElement.style.setProperty('--good', palettes[state.prestigeColorIndex % palettes.length][3] || '#10b981');
+    themeLabel.textContent = 'System Rebuild';
+    themePreview.textContent = 'Palette ' + (state.prestigeColorIndex+1);
+    prestige = state.prestige || 0;
+    bits = state.bits || 0;
+    nodesDestroyed = state.nodesDestroyed || 0;
+  }
+
+  // final small helpers
+  function randInt(a,b){ return Math.floor(a + Math.random()*(b-a+1)); }
+
+  // expose some functions for debug
+  window.nb = {
+    saveNow, loadNow, state
+  };
+
+  // end of IIFE
+})();
+</script>
+</body>
+</html>
